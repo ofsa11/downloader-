@@ -103,7 +103,12 @@ func (a *App) ConfirmLogin(uid string) string {
 func (a *App) GetBookShelf(vid, skey string) string {
 	url := "https://weread.qq.com/web/shelf"
 	client := http.Client{}
-	req, _ := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		fmt.Println("创建请求失败:", err)
+		return "[]"
+	}
+	
 	req.Header.Set("Cookie", fmt.Sprintf(`wr_skey=%s;wr_vid=%s;wr_pf=2;`, skey, vid))
 	req.Header.Set("Host", "weread.qq.com")
 	req.Header.Set("Connection", "keep-alive")
@@ -115,18 +120,40 @@ func (a *App) GetBookShelf(vid, skey string) string {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("请求失败:", err)
+		return "[]"
 	}
 	defer resp.Body.Close()
+	
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("读取响应失败:", err)
+		return "[]"
 	}
 
-	rawBooks := strings.Split(string(data), `"rawBooks":`)[1]
-	rawBooks = strings.Split(rawBooks, `,"loadingMore"`)[0]
+	dataStr := string(data)
+	// 查找rawBooks的起始位置
+	startIndex := strings.Index(dataStr, `"rawBooks":`)
+	if startIndex == -1 {
+		fmt.Println("未找到rawBooks数据")
+		return "[]"
+	}
+	
+	// 提取rawBooks数据
+	startIndex += len(`"rawBooks":`)
+	endIndex := strings.Index(dataStr[startIndex:], `,"loadingMore"`)
+	if endIndex == -1 {
+		// 如果没有loadingMore，查找"books":后面的结束位置
+		endIndex = strings.Index(dataStr[startIndex:], `]`)
+		if endIndex == -1 {
+			fmt.Println("未找到数据结束位置")
+			return "[]"
+		}
+		endIndex++ // 包含]字符
+	}
+	
+	rawBooks := dataStr[startIndex : startIndex+endIndex]
 	return rawBooks
-
 }
 func (a *App) Download(bookId, skey, vid string) string {
 	return decrypt.DownloadBook(bookId, skey, vid)

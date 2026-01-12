@@ -7,15 +7,20 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"golang.org/x/net/html"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/user"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+	"github.com/bmaupin/go-epub"
+	"golang.org/x/net/html"
 
 	"github.com/yeka/zip"
 )
@@ -32,6 +37,31 @@ func initHeader(req *http.Request, vid, skey string) *http.Request {
 	req.Header["Connection"] = []string{"Keep-Alive"}
 	return req
 }
+
+func getDownloadPath() (string, error) {
+	usr, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(usr.HomeDir, "Documents", "WereadBooks"), nil
+}
+
+// 递归删除指定目录下的所有zip文件
+func removeAllZipFiles(dirPath string) error {
+	return filepath.Walk(dirPath, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".zip") {
+			if err := os.Remove(path); err != nil {
+				return err
+			}
+			fmt.Printf("已删除压缩文件: %s\n", path)
+		}
+		return nil
+	})
+}
+
 func getKeyAndIV(vid int) ([]byte, []byte) {
 
 	remapArr := [10]byte{0x2d, 0x50, 0x56, 0xd7, 0x72, 0x53, 0xbf, 0x22, 0xfb, 0x20}
@@ -91,44 +121,62 @@ func MergeTxtBook(bookName, bookPath string) {
 			Paid        int     `json:"paid"`
 		} `json:"chapters"`
 	}
-	f, err := os.Open(bookPath + "info.txt")
+	f, err := os.Open(filepath.Join(bookPath, "info.txt"))
 	if err != nil {
-		panic(err)
+		fmt.Println("打开info.txt失败:", err)
+		return
 	}
 	defer f.Close()
 	var bookInfo BookInfo
 	err = json.NewDecoder(f).Decode(&bookInfo)
 	if err != nil {
-		panic(err)
+		fmt.Println("解析info.txt失败:", err)
+		return
 	}
-	//创建目录
-	os.Mkdir(bookPath+"看这里", os.ModePerm)
-	//创建txt文件
-	bookFile, _ := os.Create(bookPath + "看这里/" + bookName + ".txt")
+	//直接在书籍文件夹中创建txt文件，不再使用"看这里"子文件夹
+	txtPath := filepath.Join(bookPath, bookName+".txt")
+	bookFile, err := os.Create(txtPath)
+	if err != nil {
+		fmt.Println("创建txt文件失败:", err)
+		return
+	}
 	defer bookFile.Close()
 	//读取章节信息
 	for _, chapter := range bookInfo.Chapters {
 		oldName := fmt.Sprintf("%s_%d_o", bookInfo.BookId, chapter.ChapterUid)
 		newName := fmt.Sprintf("第%d章 %s", chapter.ChapterIdx, chapter.Title)
 		//读取章节内容
-		chapterFile, err := os.Open(bookPath + oldName)
-
+		chapterPath := filepath.Join(bookPath, oldName)
+		chapterFile, err := os.Open(chapterPath)
 		if err != nil {
-			panic(err)
+			fmt.Println("打开章节文件失败:", err, "路径:", chapterPath)
+			continue // 跳过失败的章节，而不是panic
 		}
 
 		//写入章节内容
-		bookFile.WriteString(newName + "\n\n\n")
+		_, err = bookFile.WriteString(newName + "\n\n\n")
+		if err != nil {
+			fmt.Println("写入章节标题失败:", err)
+			chapterFile.Close()
+			continue
+		}
 		buf := make([]byte, 1024)
 		for {
 			n, err := chapterFile.Read(buf)
 			if err != nil {
 				break
 			}
-			bookFile.Write(buf[:n])
+			_, err = bookFile.Write(buf[:n])
+			if err != nil {
+				fmt.Println("写入章节内容失败:", err)
+				break
+			}
 		}
 		chapterFile.Close()
-		bookFile.WriteString("\n\n\n")
+		_, err = bookFile.WriteString("\n\n\n")
+		if err != nil {
+			fmt.Println("写入章节分隔符失败:", err)
+		}
 	}
 
 }
@@ -158,7 +206,13 @@ func MergePdfBook(bookName, bookPath string) {
 	}
 	page := `<div style="page-break-after: always;"></div>`
 	//css样式
-	styles, _ := os.ReadDir(bookPath + "Styles")
+	stylesPath := filepath.Join(bookPath, "Styles")
+	styles, err := os.ReadDir(stylesPath)
+	if err != nil {
+		fmt.Println("读取Styles目录失败:", err)
+		// 如果Styles目录不存在，继续处理
+		styles = []fs.DirEntry{}
+	}
 	var styleBody string
 	for _, style := range styles {
 		s := fmt.Sprintf(`<link href="../Styles/%s" rel="stylesheet" type="text/css" />`+"\n", style.Name())
@@ -177,25 +231,53 @@ func MergePdfBook(bookName, bookPath string) {
 </html>
 	`
 
-	f, err := os.Open(bookPath + "info.txt")
+	infoPath := filepath.Join(bookPath, "info.txt")
+	f, err := os.Open(infoPath)
 	if err != nil {
-		panic(err)
+		fmt.Println("打开info.txt失败:", err)
+		return
 	}
 	defer f.Close()
 	var bookInfo BookInfo
 	err = json.NewDecoder(f).Decode(&bookInfo)
+	if err != nil {
+		fmt.Println("解析info.txt失败:", err)
+		return
+	}
 
-	os.Mkdir(bookPath+"看这里", os.ModePerm)
-	coverFile, _ := os.Open(bookPath + bookInfo.Chapters[0].Files[0])
-	defer coverFile.Close()
+	// 使用第一个章节的文件作为封面
+	if len(bookInfo.Chapters) > 0 && len(bookInfo.Chapters[0].Files) > 0 {
+		coverPath := filepath.Join(bookPath, bookInfo.Chapters[0].Files[0])
+		coverFile, err := os.Open(coverPath)
+		if err != nil {
+			fmt.Println("打开封面文件失败:", err)
+			// 如果封面文件打不开，继续处理
+		} else {
+			defer coverFile.Close()
+		}
+	}
 
-	htmlDoc, _ := goquery.NewDocumentFromReader(strings.NewReader(htmlBody))
+	htmlDoc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlBody))
+	if err != nil {
+		fmt.Println("创建HTML文档失败:", err)
+		return
+	}
 
 	for _, chapter := range bookInfo.Chapters {
 		for _, file := range chapter.Files {
-			f, _ := os.Open(bookPath + file)
-			defer f.Close()
-			docBody, _ := io.ReadAll(f)
+			filePath := filepath.Join(bookPath, file)
+			f, err := os.Open(filePath)
+			if err != nil {
+				fmt.Println("打开章节文件失败:", err, "路径:", filePath)
+				continue
+			}
+			docBody, err := io.ReadAll(f)
+			if err != nil {
+				fmt.Println("读取章节文件失败:", err)
+				f.Close()
+				continue
+			}
+			f.Close() // 直接关闭文件
 			docHtml := string(docBody)
 			docHtml = strings.Split(docHtml, "</head>")[1]
 			docHtml = strings.Split(docHtml, "</html>")[0]
@@ -204,13 +286,126 @@ func MergePdfBook(bookName, bookPath string) {
 			htmlDoc.Find("body").AppendHtml(page)
 		}
 	}
-	//创建bookFile
-	bookFile, _ := os.Create(bookPath + "看这里/" + bookName + ".html")
+	//直接在书籍文件夹中创建HTML文件，不再使用"看这里"子文件夹
+	htmlPath := filepath.Join(bookPath, bookName+".html")
+	bookFile, err := os.Create(htmlPath)
+	if err != nil {
+		fmt.Println("创建HTML文件失败:", err)
+		return
+	}
 	defer bookFile.Close()
 	//写入bookFile
-	h, _ := htmlDoc.Html()
-	bookFile.WriteString(html.UnescapeString(h))
+	h, err := htmlDoc.Html()
+	if err != nil {
+		fmt.Println("获取HTML内容失败:", err)
+		return
+	}
+	_, err = bookFile.WriteString(html.UnescapeString(h))
+	if err != nil {
+		fmt.Println("写入HTML文件失败:", err)
+		return
+	}
+}
 
+// 生成EPUB文件
+func GenerateEPUB(bookName, bookPath string) {
+	type BookInfo struct {
+		BookId            string `json:"bookId"`
+		Synckey           int    `json:"synckey"`
+		ChapterUpdateTime int    `json:"chapterUpdateTime"`
+		Chapters          []struct {
+			ChapterUid  int      `json:"chapterUid"`
+			ChapterIdx  int      `json:"chapterIdx"`
+			UpdateTime  int      `json:"updateTime"`
+			Title       string   `json:"title"`
+			WordCount   int      `json:"wordCount"`
+			Price       int      `json:"price"`
+			IsMPChapter int      `json:"isMPChapter"`
+			Paid        int      `json:"paid"`
+			Level       int      `json:"level"`
+			Files       []string `json:"files"`
+			Anchors     []struct {
+				Title  string `json:"title"`
+				Anchor string `json:"anchor"`
+				Level  int    `json:"level"`
+			} `json:"anchors,omitempty"`
+		} `json:"chapters"`
+	}
+
+	// 读取书籍信息
+	infoPath := filepath.Join(bookPath, "info.txt")
+	f, err := os.Open(infoPath)
+	if err != nil {
+		fmt.Println("打开info.txt失败:", err)
+		return
+	}
+	defer f.Close()
+
+	var bookInfo BookInfo
+	err = json.NewDecoder(f).Decode(&bookInfo)
+	if err != nil {
+		fmt.Println("解析info.txt失败:", err)
+		return
+	}
+
+	// 创建EPUB实例
+	book := epub.NewEpub(bookName)
+
+	// 添加内容到EPUB
+	for _, chapter := range bookInfo.Chapters {
+		// 章节标题
+		chapterTitle := chapter.Title
+		var chapterContent string
+
+		// 读取章节内容
+		for _, file := range chapter.Files {
+			filePath := filepath.Join(bookPath, file)
+			f, err := os.Open(filePath)
+			if err != nil {
+				fmt.Println("打开章节文件失败:", err, "路径:", filePath)
+				continue
+			}
+
+			docBody, err := io.ReadAll(f)
+			if err != nil {
+				fmt.Println("读取章节文件失败:", err)
+				f.Close()
+				continue
+			}
+			f.Close()
+
+			docHtml := string(docBody)
+			// 提取body内容
+			if strings.Contains(docHtml, "</head>") {
+				docHtml = strings.Split(docHtml, "</head>")[1]
+			}
+			if strings.Contains(docHtml, "</html>") {
+				docHtml = strings.Split(docHtml, "</html>")[0]
+			}
+			// 替换body标签为div
+			bodyData := strings.ReplaceAll(docHtml, "body", "div")
+			chapterContent += bodyData
+		}
+
+		// 添加章节到EPUB
+		_, err := book.AddSection(chapterContent, chapterTitle, "", "")
+		if err != nil {
+			fmt.Println("添加章节到EPUB失败:", err)
+			continue
+		}
+	}
+
+	// 直接在书籍文件夹中生成EPUB文件，不再使用"看这里"子文件夹
+	epubPath := filepath.Join(bookPath, bookName+".epub")
+
+	// 写入EPUB文件
+	err = book.Write(epubPath)
+	if err != nil {
+		fmt.Println("写入EPUB文件失败:", err)
+		return
+	}
+
+	fmt.Printf("EPUB文件生成成功: %s\n", epubPath)
 }
 
 func GetBookInfo(bookId, skey, vid string) (int64, int64, string, string) {
@@ -394,6 +589,21 @@ func GetBookInfo(bookId, skey, vid string) (int64, int64, string, string) {
 func DownloadBook(bookId, skey, vid string) string {
 	fmt.Println("开始下载", bookId)
 	bookChapterSize, bookVersion, bookFormat, bookName := GetBookInfo(bookId, skey, vid)
+
+	// 获取用户文档目录下的下载路径
+	downloadsPath, err := getDownloadPath()
+	if err != nil {
+		fmt.Println("获取下载路径失败:", err)
+		return "获取下载路径失败"
+	}
+
+	// 确保下载目录存在
+	err = os.MkdirAll(downloadsPath, os.ModePerm)
+	if err != nil {
+		fmt.Println("创建下载目录失败:", err)
+		return "创建下载目录失败"
+	}
+
 	url := fmt.Sprintf("https://i.weread.qq.com/book/chapterdownload?bookId=%s&chapters=0-%d&pf=wechat_wx-2001-android-100-weread&pfkey=pfKey&zoneId=1&bookVersion=%d&bookType=%s&quote=&release=1&stopAutoPayWhenBNE=1&preload=2&preview=0&offline=0&giftPayingCard=0&enVersion=7.5.0&modernVersion=7.5.0&teenmode=0", bookId, bookChapterSize, bookVersion, bookFormat)
 	client := http.Client{}
 	fmt.Println("下载请求Url", url)
@@ -420,8 +630,17 @@ func DownloadBook(bookId, skey, vid string) string {
 	encryptKey := resp.Header.Get("encryptKey")
 	fmt.Println(vid, encryptKey)
 	pwdStr := getPassword(vid, encryptKey)
-	os.MkdirAll("./book/"+vid+"/", os.ModePerm)
-	f, err := os.Create("./book/" + vid + "/" + bookName + ".zip")
+
+	// 使用用户文档目录
+	bookDir := filepath.Join(downloadsPath, vid)
+	err = os.MkdirAll(bookDir, os.ModePerm)
+	if err != nil {
+		fmt.Println(err, "create book dir")
+		return "创建书籍目录失败"
+	}
+
+	zipPath := filepath.Join(bookDir, bookName+".zip")
+	f, err := os.Create(zipPath)
 	if err != nil {
 		fmt.Println(err, "create f")
 		return "创建文件失败"
@@ -448,7 +667,7 @@ func DownloadBook(bookId, skey, vid string) string {
 			fmt.Println(err, "open file")
 			return "打开文件失败"
 		}
-		fileName := "./book/" + vid + "/" + bookName + "/" + f.Name
+		fileName := filepath.Join(bookDir, bookName, f.Name)
 		_, err = os.Stat(fileName)
 		if err == nil {
 			continue
@@ -478,11 +697,25 @@ func DownloadBook(bookId, skey, vid string) string {
 		file.Close()
 
 	}
-	//导出书籍
-	if bookFormat == "epub" {
-		MergePdfBook(bookName, "./book/"+vid+"/"+bookName+"/")
-	} else {
-		MergeTxtBook(bookName, "./book/"+vid+"/"+bookName+"/")
+	// 删除原始加密ZIP文件，只保留解压后的文件夹
+	if err := os.Remove(zipPath); err != nil {
+		fmt.Println("删除ZIP文件失败:", err)
 	}
+	// 导出书籍
+	bookPath := filepath.Join(bookDir, bookName+"/")
+	if bookFormat == "epub" {
+		MergePdfBook(bookName, bookPath)
+	} else {
+		MergeTxtBook(bookName, bookPath)
+	}
+
+	// 生成EPUB文件
+	GenerateEPUB(bookName, bookPath)
+
+	// 删除书籍文件夹中的所有压缩文件
+	if err := removeAllZipFiles(bookPath); err != nil {
+		fmt.Println("删除书籍文件夹中的压缩文件失败:", err)
+	}
+
 	return "下载完成"
 }
