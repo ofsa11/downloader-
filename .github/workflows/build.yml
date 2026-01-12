@@ -47,9 +47,16 @@ jobs:
     - name: Build Mac app
       if: matrix.os == 'macos-latest'
       run: |
-        # Build without packaging to get raw binaries
-        wails build -platform darwin/arm64 -package=false -o weread_downloader-darwin-arm64
-        wails build -platform darwin/amd64 -package=false -o weread_downloader-darwin-amd64
+        # Build and get the binary from the app bundle
+        wails build -platform darwin/arm64
+        # Extract the binary from the app bundle
+        cp build/bin/weread_downloader.app/Contents/MacOS/weread_downloader build/bin/weread_downloader-darwin-arm64
+        
+        # Build amd64 version
+        wails build -platform darwin/amd64
+        # Extract the binary from the app bundle
+        cp build/bin/weread_downloader.app/Contents/MacOS/weread_downloader build/bin/weread_downloader-darwin-amd64
+        
         echo "Creating universal binary..."
         mkdir -p build/universal
         lipo -create build/bin/weread_downloader-darwin-arm64 build/bin/weread_downloader-darwin-amd64 -output build/universal/weread_downloader
@@ -58,8 +65,8 @@ jobs:
           cp -r build/darwin/iconfile.icns build/universal/
         fi
         echo "Universal binary created"
-        # Now build the packaged app (arm64)
-        wails build -platform darwin/arm64
+        # Keep the arm64 app bundle
+        mv build/bin/weread_downloader.app build/bin/weread_downloader-arm64.app
 
     - name: Build Windows app
       if: matrix.os == 'windows-latest'
