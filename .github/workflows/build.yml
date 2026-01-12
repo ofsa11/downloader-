@@ -49,24 +49,49 @@ jobs:
       if: matrix.os == 'macos-latest'
       run: |
         # Create build output directory
-        mkdir -p build/bin
+        mkdir -p build/bin build/universal
         
         # Build arm64 version
         wails build -platform darwin/arm64
+        
+        # List files after arm64 build
+        echo "Files after arm64 build:"
+        ls -la build/bin
+        
         # Extract arm64 binary
-        cp build/bin/weread_downloader.app/Contents/MacOS/weread_downloader build/bin/weread_downloader-darwin-arm64
-        # Save arm64 app bundle
-        cp -r build/bin/weread_downloader.app build/bin/weread_downloader-arm64.app
+        if [ -f "build/bin/weread_downloader.app/Contents/MacOS/weread_downloader" ]; then
+          cp build/bin/weread_downloader.app/Contents/MacOS/weread_downloader build/bin/weread_downloader-darwin-arm64
+          # Save arm64 app bundle
+          cp -r build/bin/weread_downloader.app build/bin/weread_downloader-arm64.app
+        else
+          echo "ERROR: arm64 binary not found!"
+          exit 1
+        fi
         
         # Build amd64 version
         wails build -platform darwin/amd64
+        
+        # List files after amd64 build
+        echo "Files after amd64 build:"
+        ls -la build/bin
+        
         # Extract amd64 binary
-        cp build/bin/weread_downloader.app/Contents/MacOS/weread_downloader build/bin/weread_downloader-darwin-amd64
+        if [ -f "build/bin/weread_downloader.app/Contents/MacOS/weread_downloader" ]; then
+          cp build/bin/weread_downloader.app/Contents/MacOS/weread_downloader build/bin/weread_downloader-darwin-amd64
+        else
+          echo "ERROR: amd64 binary not found!"
+          exit 1
+        fi
         
         echo "Creating universal binary..."
-        mkdir -p build/universal
         # Create universal binary
-        lipo -create build/bin/weread_downloader-darwin-arm64 build/bin/weread_downloader-darwin-amd64 -output build/universal/weread_downloader
+        if [ -f "build/bin/weread_downloader-darwin-arm64" ] && [ -f "build/bin/weread_downloader-darwin-amd64" ]; then
+          lipo -create build/bin/weread_downloader-darwin-arm64 build/bin/weread_downloader-darwin-amd64 -output build/universal/weread_downloader
+        else
+          echo "ERROR: Binary files not found for universal binary creation!"
+          exit 1
+        fi
+        
         # Copy supporting files
         if [ -f build/darwin/Info.plist ]; then
           cp build/darwin/Info.plist build/universal/
@@ -74,6 +99,11 @@ jobs:
         if [ -f build/darwin/iconfile.icns ]; then
           cp build/darwin/iconfile.icns build/universal/
         fi
+        
+        # Final list of files
+        echo "Final Mac build files:"
+        ls -la build/bin
+        ls -la build/universal
         echo "Universal binary created"
 
     - name: Build Windows app
