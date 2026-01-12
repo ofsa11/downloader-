@@ -1,10 +1,8 @@
-name: Build Mac and Windows
+name: Build and Release
 
 on:
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+    tags: [ 'v*.*.*' ]  # Only run on version tags like v1.0.0
   workflow_dispatch:
 
 jobs:
@@ -78,6 +76,7 @@ jobs:
       with:
         name: weread-downloader-mac
         path: |
+          build/bin/weread_downloader-arm64.app
           build/bin/weread_downloader-darwin-arm64
           build/bin/weread_downloader-darwin-amd64
           build/universal/
@@ -88,3 +87,35 @@ jobs:
       with:
         name: weread-downloader-windows
         path: build/bin/weread_downloader.exe
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download Mac artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: weread-downloader-mac
+        path: build/bin
+
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: weread-downloader-windows
+        path: build/bin
+
+    - name: Create release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          build/bin/weread_downloader-arm64.app
+          build/bin/weread_downloader-darwin-arm64
+          build/bin/weread_downloader-darwin-amd64
+          build/bin/weread_downloader.exe
+          build/bin/universal/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
