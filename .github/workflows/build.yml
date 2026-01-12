@@ -86,9 +86,7 @@ jobs:
       with:
         name: weread-downloader-mac
         path: |
-          build/bin/weread_downloader-arm64.app
-          build/bin/weread_downloader-darwin-arm64
-          build/bin/weread_downloader-darwin-amd64
+          build/bin/
           build/universal/
 
     - name: Upload Windows artifacts
