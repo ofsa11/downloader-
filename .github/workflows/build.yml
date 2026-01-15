@@ -62,7 +62,7 @@ jobs:
           mv "build/bin/下载器.app" "build/bin/下载器-arm64.app"
           # Create zip
           cd build/bin
-          zip -r "下载器-mac-arm64.zip" "下载器-arm64.app"
+          zip -r "WeReadDownloader-Mac-Arm64.zip" "下载器-arm64.app"
           rm -rf "下载器-arm64.app"
           cd ../..
         else
@@ -81,7 +81,7 @@ jobs:
           mv "build/bin/下载器.app" "build/bin/下载器-amd64.app"
           # Create zip
           cd build/bin
-          zip -r "下载器-mac-amd64.zip" "下载器-amd64.app"
+          zip -r "WeReadDownloader-Mac-Amd64.zip" "下载器-amd64.app"
           rm -rf "下载器-amd64.app"
           cd ../..
         else
@@ -94,7 +94,9 @@ jobs:
 
     - name: Build Windows app
       if: matrix.os == 'windows-latest'
-      run: wails build -platform windows/amd64 -s
+      run: |
+        wails build -platform windows/amd64 -s
+        mv "build/bin/下载器.exe" "build/bin/WeReadDownloader-Windows.exe"
 
     - name: Upload Mac artifacts
       if: matrix.os == 'macos-latest'
@@ -108,7 +110,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: downloader-windows
-        path: build/bin/下载器.exe
+        path: build/bin/WeReadDownloader-Windows.exe
 
   release:
     needs: build
