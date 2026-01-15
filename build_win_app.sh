@@ -1,17 +1,16 @@
 #!/bin/bash
 
-# 微信读书下载器 Mac打包脚本
+# 微信读书下载器 Windows打包脚本 (在macOS上交叉编译)
 # 请在确保已安装Go和Wails后运行此脚本
 
 set -e  # 遇到错误时停止执行
 
-echo "下载器 Mac应用打包脚本"
+echo "下载器 Windows打包脚本"
 echo "================================"
 
 echo "检查Go是否已安装..."
 if ! command -v go &> /dev/null; then
     echo "错误: 未找到Go。请先安装Go 1.18或更高版本。"
-    echo "可以从 https://golang.org/dl/ 下载安装"
     exit 1
 fi
 
@@ -21,8 +20,6 @@ echo "检查Wails是否已安装..."
 if ! command -v wails &> /dev/null; then
     echo "Wails未安装，正在安装Wails CLI..."
     go install github.com/wailsapp/wails/v2/cmd/wails@latest
-    echo "Wails安装完成"
-    # 添加Wails到PATH
     export PATH=$PATH:$(go env GOPATH)/bin
 fi
 
@@ -32,7 +29,7 @@ echo "Wails版本: $(wails version 2>/dev/null || echo "无法获取版本")"
 cd "$(dirname "$0")"
 
 echo "安装Go依赖..."
-GOOS=darwin go mod tidy
+go mod tidy
 
 echo "安装前端依赖..."
 cd frontend
@@ -42,16 +39,19 @@ echo "返回项目根目录..."
 cd ..
 
 echo "清理旧的构建文件..."
-rm -rf build/bin/
+rm -rf build/bin/weread_downloader.exe
+rm -rf build/bin/downloader.exe
+rm -rf build/bin/下载器.exe
 
-echo "开始构建Mac应用..."
-# 直接构建，Wails会自动读取配置
-wails build
+echo "开始构建Windows应用..."
+# 使用 -platform windows/amd64 进行交叉编译
+# -skipbindings 跳过绑定生成（如果不需要）
+# -s -w 减小体积
+wails build -platform windows/amd64
 
 echo "================================"
 echo "构建完成！"
-echo "Mac应用已生成在 build/bin/ 目录下"
-echo "文件名为 下载器.app"
+echo "Windows应用已生成在 build/bin/ 目录下"
 echo "================================"
 
 # 打开生成目录

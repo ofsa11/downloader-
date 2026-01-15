@@ -155,6 +155,7 @@ func (a *App) GetBookShelf(vid, skey string) string {
 	rawBooks := dataStr[startIndex : startIndex+endIndex]
 	return rawBooks
 }
+
 func (a *App) Download(bookId, skey, vid string) string {
 	return decrypt.DownloadBook(bookId, skey, vid)
 }

@@ -1,16 +1,34 @@
 {
-  "name": "weread_downloader",
-  "outputfilename": "weread_downloader",
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "下载器",
+  "outputfilename": "下载器",
   "frontend:install": "npm install",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
-  "window": {
-    "width": 1024,
-    "height": 768,
-    "resizable": true,
-    "fullscreen": false,
-    "minwidth": 800,
-    "minheight": 600
+  "info": {
+    "companyName": "Weread Downloader",
+    "productName": "下载器",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright © 2024",
+    "comments": "下载器 - 用于下载 WR 中的图书到本地"
+  },
+  "build": {
+    "binaryname": "weread_downloader",
+    "env": {
+      "GOOS": "darwin"
+    }
+  },
+  "mac": {
+    "bundleID": "com.weread.downloader",
+    "application": {
+      "category": "public.app-category.productivity"
+    },
+    "info": {
+      "NSAppTransportSecurity": {
+        "NSAllowsArbitraryLoads": true
+      },
+      "NSAllowsArbitraryLoads": true
+    }
   }
 }

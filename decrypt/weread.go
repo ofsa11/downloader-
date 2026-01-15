@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/user"
@@ -623,7 +622,7 @@ func DownloadBook(bookId, skey, vid string) string {
 	}
 	if resp.StatusCode == 402 {
 		fmt.Println("下载请求返回body", string(bookData))
-		return "没有下载整本书的权限，请检查是否在微信读书中购买了整本书"
+		return "没有下载整本书的权限，请检查是否在 WR 中购买了整本书"
 	}
 
 	//读取body
@@ -684,7 +683,7 @@ func DownloadBook(bookId, skey, vid string) string {
 		dir := path.Dir(fileName)
 		_, err = os.Stat(dir)
 		if err != nil {
-			err = os.MkdirAll(dir, 0777)
+			err = os.MkdirAll(dir, 0755)
 			if err != nil {
 				fmt.Println(err)
 				return "创建文件夹失败"
@@ -697,7 +696,7 @@ func DownloadBook(bookId, skey, vid string) string {
 			fmt.Println(err)
 			return "创建文件失败"
 		}
-		b, err := ioutil.ReadAll(r)
+		b, err := io.ReadAll(r)
 		if err != nil {
 			fmt.Println(err)
 			return "读取文件失败"
