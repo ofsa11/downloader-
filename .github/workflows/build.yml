@@ -49,82 +49,66 @@ jobs:
       if: matrix.os == 'macos-latest'
       run: |
         # Create build output directory
-        mkdir -p build/bin build/universal
+        mkdir -p build/bin
         
         # Build arm64 version
+        echo "Building arm64 version..."
         wails build -platform darwin/arm64
         
-        # List files after arm64 build
-        echo "Files after arm64 build:"
-        ls -la build/bin
-        
-        # Extract arm64 binary
-        if [ -f "build/bin/weread_downloader.app/Contents/MacOS/weread_downloader" ]; then
-          cp build/bin/weread_downloader.app/Contents/MacOS/weread_downloader build/bin/weread_downloader-darwin-arm64
-          # Save arm64 app bundle
-          cp -r build/bin/weread_downloader.app build/bin/weread_downloader-arm64.app
+        # Check if app exists
+        if [ -d "build/bin/下载器.app" ]; then
+          echo "Arm64 app built successfully"
+          # Rename to avoid conflict
+          mv "build/bin/下载器.app" "build/bin/下载器-arm64.app"
+          # Create zip
+          cd build/bin
+          zip -r "下载器-mac-arm64.zip" "下载器-arm64.app"
+          rm -rf "下载器-arm64.app"
+          cd ../..
         else
-          echo "ERROR: arm64 binary not found!"
+          echo "ERROR: Arm64 app not found!"
           exit 1
         fi
         
         # Build amd64 version
+        echo "Building amd64 version..."
         wails build -platform darwin/amd64
         
-        # List files after amd64 build
-        echo "Files after amd64 build:"
-        ls -la build/bin
-        
-        # Extract amd64 binary
-        if [ -f "build/bin/weread_downloader.app/Contents/MacOS/weread_downloader" ]; then
-          cp build/bin/weread_downloader.app/Contents/MacOS/weread_downloader build/bin/weread_downloader-darwin-amd64
+        # Check if app exists
+        if [ -d "build/bin/下载器.app" ]; then
+          echo "Amd64 app built successfully"
+          # Rename to avoid conflict
+          mv "build/bin/下载器.app" "build/bin/下载器-amd64.app"
+          # Create zip
+          cd build/bin
+          zip -r "下载器-mac-amd64.zip" "下载器-amd64.app"
+          rm -rf "下载器-amd64.app"
+          cd ../..
         else
-          echo "ERROR: amd64 binary not found!"
+          echo "ERROR: Amd64 app not found!"
           exit 1
         fi
         
-        echo "Creating universal binary..."
-        # Create universal binary
-        if [ -f "build/bin/weread_downloader-darwin-arm64" ] && [ -f "build/bin/weread_downloader-darwin-amd64" ]; then
-          lipo -create build/bin/weread_downloader-darwin-arm64 build/bin/weread_downloader-darwin-amd64 -output build/universal/weread_downloader
-        else
-          echo "ERROR: Binary files not found for universal binary creation!"
-          exit 1
-        fi
-        
-        # Copy supporting files
-        if [ -f build/darwin/Info.plist ]; then
-          cp build/darwin/Info.plist build/universal/
-        fi
-        if [ -f build/darwin/iconfile.icns ]; then
-          cp build/darwin/iconfile.icns build/universal/
-        fi
-        
-        # Final list of files
         echo "Final Mac build files:"
         ls -la build/bin
-        ls -la build/universal
-        echo "Universal binary created"
 
     - name: Build Windows app
       if: matrix.os == 'windows-latest'
-      run: wails build -platform windows/amd64
+      run: wails build -platform windows/amd64 -s
 
     - name: Upload Mac artifacts
       if: matrix.os == 'macos-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: weread-downloader-mac
-        path: |
-          build/bin/
-          build/universal/
+        name: downloader-mac
+        path: build/bin/*.zip
 
     - name: Upload Windows artifacts
       if: matrix.os == 'windows-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: weread-downloader-windows
-        path: build/bin/weread_downloader.exe
+        name: downloader-windows
+        path: build/bin/下载器.exe
 
   release:
     needs: build
@@ -139,13 +123,13 @@ jobs:
     - name: Download Mac artifacts
       uses: actions/download-artifact@v4
       with:
-        name: weread-downloader-mac
+        name: downloader-mac
         path: build/bin
 
     - name: Download Windows artifacts
       uses: actions/download-artifact@v4
       with:
-        name: weread-downloader-windows
+        name: downloader-windows
         path: build/bin
 
     - name: List build files
@@ -170,6 +154,6 @@ jobs:
     - name: Upload final artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: weread-downloader-all
+        name: downloader-all
         path: |
           build/bin/
