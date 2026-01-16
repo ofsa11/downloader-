@@ -25,6 +25,22 @@
             正在加载书架...
           </div>
 
+          <!-- 批量选择控制区 -->
+          <div class="flex gap-2" v-if="!isDownloadingAll">
+            <template v-if="!isSelectionMode">
+               <n-button secondary type="info" @click="toggleSelectionMode">
+                 <template #icon><n-icon><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M400 48H112a64.07 64.07 0 00-64 64v288a64.07 64.07 0 0064 64h288a64.07 64.07 0 0064-64V112a64.07 64.07 0 00-64-64zm-48 288H160a16 16 0 010-32h192a16 16 0 010 32zm32-96H128a16 16 0 010-32h256a16 16 0 010 32z" fill="currentColor"/></svg></n-icon></template>
+                 批量选择
+               </n-button>
+            </template>
+            <template v-else>
+               <n-button secondary @click="toggleSelectionMode">取消</n-button>
+               <n-button type="info" @click="downloadSelectedBooks" :disabled="selectedBooks.size === 0">
+                 下载选中 ({{ selectedBooks.size }})
+               </n-button>
+            </template>
+          </div>
+
           <n-button
             secondary
             type="primary"
@@ -69,16 +85,19 @@
           <n-gi v-for="book in bookList" :key="book.bookId">
             <n-card
               hoverable
-              class="h-full transition-transform duration-300 hover:-translate-y-1 hover:shadow-lg cursor-pointer"
+              class="h-full transition-transform duration-300 hover:-translate-y-1 hover:shadow-lg cursor-pointer relative"
+              :class="{ 'ring-2 ring-blue-500': selectedBooks.has(book.bookId) }"
               content-style="padding: 6px;"
-              @click="
-                downloadBook(
-                  book.bookId,
-                  book.title,
-                  book.format == 'txt' ? true : false
-                )
-              "
+              @click="handleBookClick(book)"
             >
+              <!-- Checkbox overlay -->
+              <div v-if="isSelectionMode" class="absolute top-2 right-2 z-10 bg-white rounded-full p-1 shadow-md transition-all"
+                   :class="selectedBooks.has(book.bookId) ? 'text-blue-500' : 'text-gray-300'">
+                 <n-icon size="20">
+                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="32" d="M416 128L192 384l-96-96"/></svg>
+                 </n-icon>
+              </div>
+
               <div class="flex flex-col h-full">
                 <div class="relative w-full aspect-[2/3] mb-3 overflow-hidden rounded bg-gray-100">
                    <img class="w-full h-full object-cover transition-transform duration-500 hover:scale-110" :src="book.cover" loading="lazy" />
@@ -173,6 +192,59 @@ const isDownloadingAll = ref(false);
 const currentDownloadingBook = ref("");
 const downloadedCount = ref(0);
 const totalBooks = ref(0);
+
+// 多选相关状态
+const isSelectionMode = ref(false);
+const selectedBooks = ref(new Set());
+
+const toggleSelectionMode = () => {
+  isSelectionMode.value = !isSelectionMode.value;
+  selectedBooks.value.clear();
+};
+
+const handleBookClick = (book) => {
+  if (isSelectionMode.value) {
+    if (selectedBooks.value.has(book.bookId)) {
+      selectedBooks.value.delete(book.bookId);
+    } else {
+      selectedBooks.value.add(book.bookId);
+    }
+  } else {
+    downloadBook(book.bookId, book.title, book.format == 'txt' ? true : false);
+  }
+};
+
+const downloadSelectedBooks = async () => {
+  if (selectedBooks.value.size === 0) return;
+  
+  isDownloadingAll.value = true;
+  downloadedCount.value = 0;
+  totalBooks.value = selectedBooks.value.size;
+  
+  const booksToDownload = bookList.value.filter(b => selectedBooks.value.has(b.bookId));
+
+  try {
+    let vid = vidRef.value.toString();
+    for (const [index, book] of booksToDownload.entries()) {
+      currentDownloadingBook.value = book.title;
+      await Download(book.bookId, skeyRef.value, vid);
+      downloadedCount.value++;
+      
+      if (index < booksToDownload.length - 1) {
+        const delaySeconds = (Math.floor(Math.random() * (3 - 1 + 1)) + 1);
+        await new Promise(r => setTimeout(r, delaySeconds * 1000));
+      }
+    }
+    message.success(`已完成 ${downloadedCount.value} 本书籍的下载`);
+    toggleSelectionMode();
+  } catch (error) {
+    message.error(`批量下载出错: ${error.message}`);
+  } finally {
+    isDownloadingAll.value = false;
+    currentDownloadingBook.value = "";
+  }
+};
+
 const checkLoginStatus = () => {
   if (!localStorage.getItem("userInfo")) {
     localStorage.clear();
