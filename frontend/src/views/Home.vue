@@ -14,12 +14,7 @@
           </n-button>
         </div>
 
-        <div class="flex items-center text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-           <n-icon class="mr-1 text-gray-400" size="14">
-             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M256 56C145.72 56 56 145.72 56 256s89.72 200 200 200 200-89.72 200-200S366.28 56 256 56zm0 82a26 26 0 1 1-26 26 26 26 0 0 1 26-26zm48 226h-88a16 16 0 0 1 0-32h28v-88h-16a16 16 0 0 1 0-32h32a16 16 0 0 1 16 16v104h28a16 16 0 0 1 0 32z" fill="currentColor"/></svg>
-           </n-icon>
-           文件夹中的书籍只能获取前四本，程序默认从第九本开始下载，一次最多下载 47 本
-         </div>
+
 
         <div class="flex items-center gap-4">
            <!-- 状态提示 -->
@@ -123,11 +118,19 @@
           positive-text="我知道了，后果自负"
           @positive-click="showRiskModal = false"
         >
-          <div class="text-lg font-bold text-red-600">
+          <div class="text-lg font-bold text-red-600 mb-6">
             <p class="mb-4">郑重警告：</p>
             <p class="mb-4">使用本软件进行下载操作有极大导致 WR 账号被封禁的风险！</p>
             <p class="mb-4">一旦封号，将无法解封，请务必谨慎使用！</p>
             <p>建议仅使用小号进行测试。</p>
+          </div>
+          <div class="bg-blue-50 p-4 rounded-lg text-sm text-blue-800 border border-blue-200">
+             <p class="font-bold mb-2">💡 使用提示：</p>
+             <ul class="list-disc list-inside space-y-1">
+               <li>文件夹中的书籍只能获取前四本</li>
+               <li>程序默认从第九本开始下载</li>
+               <li>一次最多下载 47 本</li>
+             </ul>
           </div>
         </n-modal>
   </div>
