@@ -69,8 +69,8 @@
       </div>
     </div>
 
-    <div class="flex-grow px-6 py-6 max-w-7xl mx-auto w-full">
-        <n-grid x-gap="16" y-gap="16" :cols="5">
+    <div class="flex-grow py-6 max-w-7xl mx-auto" style="width: 94%;">
+        <n-grid x-gap="16" y-gap="16" cols="2 s:3 m:4 l:5 xl:6" responsive="screen">
           <n-gi v-for="book in bookList" :key="book.bookId">
             <n-card
               hoverable
